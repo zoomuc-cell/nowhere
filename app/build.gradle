@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+    alias(libs.plugins.kotlin.android)
+    // id 'com.google.gms.google-services'
+    // id 'com.google.firebase.crashlytics'
+}
+
+android {
+    namespace 'com.auratechnologies.nowhere'
+    compileSdk 35
+
+    signingConfigs {
+        release {
+            storeFile file('../nowhere-release-key.jks')
+            keyAlias 'nowhere-key'
+        }
+    }
+
+    defaultConfig {
+        applicationId 'com.auratechnologies.nowhere'
+        minSdk 24
+        targetSdk 36
+        versionCode 8
+        versionName '5.2'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            //signingConfig signingConfigs.release//
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-location:21.1.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    // Firebase 二쇱꽍 泥섎━
+    // implementation platform('com.google.firebase:firebase-bom:32.3.1')
+    // implementation 'com.google.firebase:firebase-crashlytics'
+    // implementation 'com.google.firebase:firebase-analytics'
+}
+configurations {
+    all {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
+}
+tasks.withType(Test) {
+    enabled = false
+}
+
+android.testOptions {
+    unitTests.all {
+        enabled = false
+    }
+}
+

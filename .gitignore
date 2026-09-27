@@ -1,0 +1,63 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Secrets / local configuration
+.env
+.env.*
+key.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+google-services*.json
+
+# Android build outputs
+**/build/
+**/.gradle/
+**/.cxx/
+*.apk
+*.aab
+*.dex
+
+# Local Gradle distributions / test extraction
+gradle-*.zip
+gradle-8.9/
+aab-check/
+base/
+
+# Logs / diagnostics
+*.log
+play-install-fail*.txt
+
+# IDE / local
+.idea/
+.kotlin/
+*.iml
+
+# Backups / archives
+*.bak
+*.bak*
+*.zip
+
+# Local evidence/media folder
+증빙 영상/
+
+# Generated release artifacts
+app/release/
+
+# Local reference notes
+app/httpsyoutu.beK558TMaJM5o.txt
+app/혼자 할 수 있는 가장 쉬운 방법.txt
