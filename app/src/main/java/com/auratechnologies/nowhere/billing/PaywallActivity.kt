@@ -11,6 +11,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.IntentCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.android.billingclient.api.BillingClient.BillingResponseCode
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
@@ -127,6 +129,12 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
         })
 
         scrollView.addView(container)
+        // targetSdk 35+ 기기는 edge-to-edge가 강제되므로 상태바/내비게이션바 영역만큼 띄운다
+        ViewCompat.setOnApplyWindowInsetsListener(scrollView) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
         setContentView(scrollView)
     }
 
