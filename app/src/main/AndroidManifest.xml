@@ -18,6 +18,7 @@
     <uses-feature android:name="android.hardware.sensor.barometer" android:required="false" />
 
     <application
+        android:name=".NowhereApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="NOWHERE"

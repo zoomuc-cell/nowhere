@@ -47,6 +47,7 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
     implementation 'com.google.android.material:material:1.9.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.android.billingclient:billing-ktx:8.0.0'
     testImplementation 'junit:junit:4.13.2'
     // Firebase 二쇱꽍 泥섎━
     // implementation platform('com.google.firebase:firebase-bom:32.3.1')
