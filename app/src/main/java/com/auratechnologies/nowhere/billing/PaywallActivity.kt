@@ -22,6 +22,7 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
     private lateinit var yearlyButton: Button
 
     private var productDetails: ProductDetails? = null
+    private var loadingPlans = false
     private var navigated = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,7 +43,12 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
         val billing = BillingManager.get()
         billing.addListener(this)
         // 화면이 멈춰 있는 동안 Pro가 되었을 수 있음
-        if (billing.isPro) proceedToTarget()
+        if (billing.isPro) {
+            proceedToTarget()
+            return
+        }
+        // 연결 전에 열려 요금제를 못 불러왔다면 다시 시도
+        if (productDetails == null) loadPlans()
     }
 
     override fun onStop() {
@@ -97,12 +103,14 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
         container.addView(Button(this).apply {
             text = "구매 복원"
             setOnClickListener {
-                BillingManager.get().refresh { pro ->
-                    if (!pro && !isFinishing) {
-                        Toast.makeText(
-                            this@PaywallActivity, "복원할 구독이 없습니다.", Toast.LENGTH_SHORT
-                        ).show()
+                BillingManager.get().refresh { pro, verified ->
+                    if (pro || isFinishing) return@refresh
+                    val message = if (verified) {
+                        "복원할 구독이 없습니다."
+                    } else {
+                        "Google Play에 연결할 수 없습니다."
                     }
+                    Toast.makeText(this@PaywallActivity, message, Toast.LENGTH_SHORT).show()
                 }
             }
         })
@@ -113,7 +121,7 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
         })
 
         container.addView(TextView(this).apply {
-            text = "구독은 Google Play 계정으로 결제되며, 기간 종료 24시간 전까지 해지하지 않으면 자동 갱신됩니다."
+            text = "구독은 Google Play 계정으로 결제되며, 해지하지 않으면 자동 갱신됩니다. 언제든지 Google Play에서 해지할 수 있습니다."
             textSize = 13f
             setPadding(0, 30, 0, 0)
         })
@@ -123,8 +131,11 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
     }
 
     private fun loadPlans() {
+        if (loadingPlans || productDetails != null) return
+        loadingPlans = true
         BillingManager.get().queryPlans { result, details ->
             // 콜백은 메인 스레드에서 호출됨
+            loadingPlans = false
             if (isFinishing || isDestroyed) return@queryPlans
             if (result.responseCode != BillingResponseCode.OK || details == null) {
                 statusText.text = when (result.responseCode) {
@@ -172,10 +183,9 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
     private fun purchase(basePlanId: String) {
         val details = productDetails ?: return
         val result = BillingManager.get().launchPurchase(this, details, basePlanId)
-        if (result.responseCode != BillingResponseCode.OK &&
-            result.responseCode != BillingResponseCode.USER_CANCELED
-        ) {
-            showPurchaseError()
+        // 실패 알림은 onPurchaseError로 한 번만 전달되므로 여기서는 토스트하지 않음
+        if (result.responseCode == BillingResponseCode.ITEM_ALREADY_OWNED) {
+            BillingManager.get().refresh()
         }
     }
 
@@ -215,6 +225,11 @@ class PaywallActivity : AppCompatActivity(), BillingManager.Listener {
 
     override fun onPurchaseError(result: BillingResult) {
         showPurchaseError()
+    }
+
+    override fun onConnected() {
+        if (navigated || isFinishing || !::statusText.isInitialized) return
+        if (productDetails == null) loadPlans()
     }
 
     companion object {

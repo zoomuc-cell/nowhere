@@ -20,6 +20,9 @@
     <application
         android:name=".NowhereApp"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31"
         android:icon="@mipmap/ic_launcher"
         android:label="NOWHERE"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">

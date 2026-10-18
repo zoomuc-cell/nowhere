@@ -25,7 +25,15 @@ class BillingManager private constructor(app: Application) {
     interface Listener {
         fun onProChanged(isPro: Boolean)
         fun onPurchasePending()
+        /**
+         * 구매 실패. Play가 PurchasesUpdatedListener로 전달한 실패와, launchPurchase가
+         * Play를 호출하지 않고 만든 실패(연결 안 됨·요금제 없음)가 모두 여기로 한 번씩 전달됨.
+         * ITEM_ALREADY_OWNED·USER_CANCELED는 전달되지 않음.
+         */
         fun onPurchaseError(result: BillingResult)
+
+        /** Play 결제 서비스 연결 완료(onBillingSetupFinished OK). 메인 스레드에서 호출. */
+        fun onConnected() {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -44,6 +52,7 @@ class BillingManager private constructor(app: Application) {
     private var connecting = false
     private var retryScheduled = false
     private var retryDelayMs = INITIAL_RETRY_DELAY_MS
+    private var lastSetupResponseCode = BillingResponseCode.SERVICE_DISCONNECTED
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
         mainHandler.post { handlePurchasesUpdated(result, purchases.orEmpty()) }
@@ -69,12 +78,15 @@ class BillingManager private constructor(app: Application) {
         listeners.remove(l)
     }
 
-    /** Play에서 구독을 조회해 판정·캐시 저장·승인. onDone은 메인 스레드에서 호출. */
-    fun refresh(onDone: ((Boolean) -> Unit)? = null) {
+    /**
+     * Play에서 구독을 조회해 판정·캐시 저장·승인. onDone은 메인 스레드에서 호출.
+     * verified는 Play가 실제로 응답(OK)했는지 여부. false면 isPro는 캐시 기반 판정.
+     */
+    fun refresh(onDone: ((isPro: Boolean, verified: Boolean) -> Unit)? = null) {
         if (!billingClient.isReady) {
             mainHandler.post {
                 applyDecision(QueryOutcome.Failure)
-                onDone?.invoke(currentIsPro)
+                onDone?.invoke(currentIsPro, false)
             }
             return
         }
@@ -83,26 +95,37 @@ class BillingManager private constructor(app: Application) {
             .build()
         billingClient.queryPurchasesAsync(params) { result, purchases ->
             mainHandler.post {
-                val outcome = if (result.responseCode == BillingResponseCode.OK) {
+                val verified = result.responseCode == BillingResponseCode.OK
+                val outcome = if (verified) {
                     QueryOutcome.Success(purchases.map(::toSnapshot))
                 } else {
                     Log.w(TAG, "queryPurchases failed: ${result.responseCode} ${result.debugMessage}")
                     QueryOutcome.Failure
                 }
                 applyDecision(outcome)
-                onDone?.invoke(currentIsPro)
+                onDone?.invoke(currentIsPro, verified)
             }
         }
     }
 
-    /** nowhere_pro 상품 정보 조회. onResult는 메인 스레드에서 호출. */
+    /**
+     * nowhere_pro 상품 정보 조회. onResult는 메인 스레드에서 호출.
+     * 연결 전이면 마지막 연결 결과 코드(예: BILLING_UNAVAILABLE)를 돌려줌.
+     */
     fun queryPlans(onResult: (BillingResult, ProductDetails?) -> Unit) {
         if (!billingClient.isReady) {
-            val result = BillingResult.newBuilder()
-                .setResponseCode(BillingResponseCode.SERVICE_DISCONNECTED)
-                .setDebugMessage("BillingClient is not connected")
-                .build()
-            mainHandler.post { onResult(result, null) }
+            mainHandler.post {
+                val code = if (lastSetupResponseCode == BillingResponseCode.OK) {
+                    BillingResponseCode.SERVICE_DISCONNECTED
+                } else {
+                    lastSetupResponseCode
+                }
+                val result = BillingResult.newBuilder()
+                    .setResponseCode(code)
+                    .setDebugMessage("BillingClient is not connected")
+                    .build()
+                onResult(result, null)
+            }
             return
         }
         val product = QueryProductDetailsParams.Product.newBuilder()
@@ -119,15 +142,24 @@ class BillingManager private constructor(app: Application) {
         }
     }
 
-    /** 기본 요금제(offerId == null)로 결제 화면 시작. 메인 스레드에서 호출. */
+    /**
+     * 기본 요금제(offerId == null)로 결제 화면 시작. 메인 스레드에서 호출.
+     * 실패 알림은 리스너 onPurchaseError로만 전달됨(Play가 보낸 것이든, 여기서 만든 것이든).
+     * 호출자는 반환값으로 오류를 다시 표시하지 말 것. ITEM_ALREADY_OWNED만 호출자가 처리.
+     */
     fun launchPurchase(activity: Activity, details: ProductDetails, basePlanId: String): BillingResult {
+        if (!billingClient.isReady) {
+            return localPurchaseError(
+                BillingResponseCode.SERVICE_DISCONNECTED, "BillingClient is not connected"
+            )
+        }
         val offerToken = details.subscriptionOfferDetails
             ?.firstOrNull { it.basePlanId == basePlanId && it.offerId == null }
             ?.offerToken
-            ?: return BillingResult.newBuilder()
-                .setResponseCode(BillingResponseCode.DEVELOPER_ERROR)
-                .setDebugMessage("No base plan offer for '$basePlanId' in ${details.productId}")
-                .build()
+            ?: return localPurchaseError(
+                BillingResponseCode.DEVELOPER_ERROR,
+                "No base plan offer for '$basePlanId' in ${details.productId}"
+            )
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(details)
             .setOfferToken(offerToken)
@@ -138,6 +170,17 @@ class BillingManager private constructor(app: Application) {
         return billingClient.launchBillingFlow(activity, flowParams)
     }
 
+    /** Play를 거치지 않은 구매 실패: Play가 리스너로 보내지 않으므로 직접 리스너에 전달. */
+    private fun localPurchaseError(code: Int, message: String): BillingResult {
+        val result = BillingResult.newBuilder()
+            .setResponseCode(code)
+            .setDebugMessage(message)
+            .build()
+        Log.w(TAG, "Purchase not launched: $code $message")
+        mainHandler.post { listeners.forEach { it.onPurchaseError(result) } }
+        return result
+    }
+
     private fun startConnection() {
         if (billingClient.isReady || connecting) return
         connecting = true
@@ -145,12 +188,21 @@ class BillingManager private constructor(app: Application) {
             override fun onBillingSetupFinished(result: BillingResult) {
                 mainHandler.post {
                     connecting = false
-                    if (result.responseCode == BillingResponseCode.OK) {
-                        retryDelayMs = INITIAL_RETRY_DELAY_MS
-                        refresh()
-                    } else {
-                        Log.w(TAG, "Billing setup failed: ${result.responseCode} ${result.debugMessage}")
-                        scheduleReconnect()
+                    lastSetupResponseCode = result.responseCode
+                    when (result.responseCode) {
+                        BillingResponseCode.OK -> {
+                            retryDelayMs = INITIAL_RETRY_DELAY_MS
+                            refresh()
+                            listeners.forEach { it.onConnected() }
+                        }
+                        // Play 결제가 없는 기기: 재시도해도 소용없으므로 중단
+                        BillingResponseCode.BILLING_UNAVAILABLE,
+                        BillingResponseCode.FEATURE_NOT_SUPPORTED ->
+                            Log.w(TAG, "Billing unavailable: ${result.responseCode} ${result.debugMessage}")
+                        else -> {
+                            Log.w(TAG, "Billing setup failed: ${result.responseCode} ${result.debugMessage}")
+                            scheduleReconnect()
+                        }
                     }
                 }
             }
@@ -158,6 +210,7 @@ class BillingManager private constructor(app: Application) {
             override fun onBillingServiceDisconnected() {
                 mainHandler.post {
                     connecting = false
+                    lastSetupResponseCode = BillingResponseCode.SERVICE_DISCONNECTED
                     scheduleReconnect()
                 }
             }
