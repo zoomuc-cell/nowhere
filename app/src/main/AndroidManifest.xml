@@ -69,6 +69,11 @@
             android:name=".CurrentLocationActivity"
             android:label="현재 위치"
             android:exported="false" />
+        <activity
+            android:name=".billing.PaywallActivity"
+            android:label="NOWHERE Pro"
+            android:launchMode="singleTop"
+            android:exported="false" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
