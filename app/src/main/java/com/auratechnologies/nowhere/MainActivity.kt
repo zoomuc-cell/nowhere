@@ -25,6 +25,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.UUID
+import com.auratechnologies.nowhere.billing.BillingManager
+import com.auratechnologies.nowhere.billing.ProGate
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -686,9 +688,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun isPro(): Boolean = BillingManager.get().isPro
+
+        @JavascriptInterface
         fun openTimeline() {
             runOnUiThread {
-                startActivity(
+                ProGate.open(
+                    this@MainActivity,
                     Intent(this@MainActivity, TimelineActivity::class.java)
                 )
             }
@@ -697,7 +703,8 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openReport() {
             runOnUiThread {
-                startActivity(
+                ProGate.open(
+                    this@MainActivity,
                     Intent(
                         this@MainActivity,
                         RecordManagementActivity::class.java
@@ -709,7 +716,8 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openRecordManagement() {
             runOnUiThread {
-                startActivity(
+                ProGate.open(
+                    this@MainActivity,
                     Intent(
                         this@MainActivity,
                         RecordManagementActivity::class.java
